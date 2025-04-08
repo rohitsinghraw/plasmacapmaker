@@ -6,6 +6,7 @@
   <title>Plasma Cap Maker</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
+  <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
   <style>
     body {
       font-family: 'Comic Sans MS', sans-serif;
@@ -81,88 +82,44 @@
       const file = event.target.files[0];
       const img = document.getElementById('uploaded-image');
       img.src = URL.createObjectURL(file);
-      img.onload = () => makeImageInteractable();
-    }
-
-    function makeImageInteractable() {
-      const img = document.getElementById('uploaded-image');
-      img.setAttribute('data-x', 0);
-      img.setAttribute('data-y', 0);
-
-      interact(img)
-        .draggable({
-          modifiers: [interact.modifiers.restrictRect({ restriction: 'parent', endOnly: true })],
-          listeners: {
-            move(event) {
-              const target = event.target;
-              const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;
-              const y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;
-              target.style.transform = `translate(${x}px, ${y}px)`;
-              target.setAttribute('data-x', x);
-              target.setAttribute('data-y', y);
-            }
-          }
-        })
-        .resizable({
-          edges: { left: true, right: true, bottom: true, top: true },
-          listeners: {
-            move(event) {
-              const target = event.target;
-              const { width, height } = event.rect;
-              target.style.width = `${width}px`;
-              target.style.height = `${height}px`;
-              const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.deltaRect.left;
-              const y = (parseFloat(target.getAttribute('data-y')) || 0) + event.deltaRect.top;
-              target.style.transform = `translate(${x}px, ${y}px)`;
-              target.setAttribute('data-x', x);
-              target.setAttribute('data-y', y);
-            }
-          },
-          modifiers: [
-            interact.modifiers.restrictEdges({ outer: 'parent' }),
-            interact.modifiers.restrictSize({ min: { width: 100, height: 100 }, max: { width: 500, height: 500 } })
-          ],
-          inertia: true
-        });
-    }
-
-    function addHandles(target) {
-      const positions = [
-        ['top', 'left'], ['top', 'center'], ['top', 'right'],
-        ['middle', 'left'], ['middle', 'right'],
-        ['bottom', 'left'], ['bottom', 'center'], ['bottom', 'right']
-      ];
-      target.querySelectorAll('.resize-handle').forEach(h => h.remove());
-      positions.forEach(([v, h]) => {
-        const dot = document.createElement('div');
-        dot.className = 'resize-handle';
-        dot.style.top = v === 'top' ? '0%' : v === 'middle' ? '50%' : '100%';
-        dot.style.left = h === 'left' ? '0%' : h === 'center' ? '50%' : '100%';
-        dot.style.transform = 'translate(-50%, -50%)';
-        target.appendChild(dot);
-      });
     }
 
     function selectCap(capImagePath) {
       const container = document.getElementById('canvas-container');
       if (currentCap) {
-        container.removeChild(currentCap);
-        currentCap = null;
+        currentCap.remove();
       }
 
-      const cap = document.createElement('div');
-      cap.id = 'draggable-cap';
-      cap.className = 'top-1/4 left-1/4 w-32 h-20';
-      cap.innerHTML = `<img src="${capImagePath}" alt="cap" /><div class="resize-box-outline"></div>`;
-      container.appendChild(cap);
-      currentCap = cap;
+      const img = new Image();
+      img.crossOrigin = 'anonymous'; // for CORS safety
+      img.src = capImagePath;
 
-      addHandles(cap);
-      makeInteractable(cap);
+      img.onload = () => {
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = img.width;
+        tempCanvas.height = img.height;
+        const ctx = tempCanvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        const dataURL = tempCanvas.toDataURL('image/png');
+
+        const cap = document.createElement('div');
+        cap.id = 'draggable-cap';
+        cap.className = 'top-1/4 left-1/4 w-32 h-20';
+        cap.innerHTML = `<img src="${dataURL}" alt="cap" /><div class="resize-box-outline"></div>`;
+        container.appendChild(cap);
+        currentCap = cap;
+
+        addHandles(cap);
+        makeInteractable(cap);
+      };
+
+      img.onerror = () => {
+        alert("Error loading cap image. Make sure 'hat.png' and 'hat2.png' exist in the same folder.");
+      };
     }
 
-    function makeInteractable(cap) {
-      interact(cap)
+    function makeInteractable(target) {
+      interact(target)
         .draggable({
           modifiers: [interact.modifiers.restrictRect({ restriction: 'parent', endOnly: true })],
           listeners: {
@@ -197,53 +154,42 @@
             interact.modifiers.restrictSize({ min: { width: 50, height: 50 }, max: { width: 500, height: 500 } })
           ],
           inertia: true
-        })
-        .on('resizestart', event => {
-          addHandles(event.target);
         });
     }
 
-    // ✅ NEW DOWNLOAD FUNCTION USING CANVAS
+    function addHandles(target) {
+      const positions = [
+        ['top', 'left'], ['top', 'center'], ['top', 'right'],
+        ['middle', 'left'], ['middle', 'right'],
+        ['bottom', 'left'], ['bottom', 'center'], ['bottom', 'right']
+      ];
+      target.querySelectorAll('.resize-handle').forEach(h => h.remove());
+      positions.forEach(([v, h]) => {
+        const dot = document.createElement('div');
+        dot.className = 'resize-handle';
+        dot.style.top = v === 'top' ? '0%' : v === 'middle' ? '50%' : '100%';
+        dot.style.left = h === 'left' ? '0%' : h === 'center' ? '50%' : '100%';
+        dot.style.transform = 'translate(-50%, -50%)';
+        target.appendChild(dot);
+      });
+    }
+
     function downloadImage() {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-
       const container = document.getElementById('canvas-container');
-      const uploadedImg = document.getElementById('uploaded-image');
-      const capDiv = document.getElementById('draggable-cap');
-
-      const width = container.clientWidth;
-      const height = container.clientHeight;
-
-      canvas.width = width;
-      canvas.height = height;
-
-      // Draw uploaded image
-      const userX = parseFloat(uploadedImg.getAttribute('data-x')) || 0;
-      const userY = parseFloat(uploadedImg.getAttribute('data-y')) || 0;
-      const imgWidth = uploadedImg.clientWidth;
-      const imgHeight = uploadedImg.clientHeight;
-
-      ctx.drawImage(uploadedImg, userX, userY, imgWidth, imgHeight);
-
-      // Draw cap image
-      if (capDiv) {
-        const capImg = capDiv.querySelector('img');
-        const capX = parseFloat(capDiv.getAttribute('data-x')) || 0;
-        const capY = parseFloat(capDiv.getAttribute('data-y')) || 0;
-        const capW = capDiv.offsetWidth;
-        const capH = capDiv.offsetHeight;
-
-        ctx.drawImage(capImg, capX, capY, capW, capH);
-      }
-
-      // Trigger download
-      const link = document.createElement('a');
-      link.download = 'plasma-cap.png';
-      link.href = canvas.toDataURL('image/png');
-      link.click();
+      html2canvas(container, {
+        backgroundColor: null,
+        useCORS: true,
+        allowTaint: true
+      }).then(canvas => {
+        const link = document.createElement('a');
+        link.download = 'plasma-cap.jpg';
+        link.href = canvas.toDataURL('image/jpeg', 0.95);
+        link.click();
+      }).catch(error => {
+        console.error('Download failed:', error);
+        alert('Something went wrong while downloading.');
+      });
     }
   </script>
-
 </body>
 </html>
