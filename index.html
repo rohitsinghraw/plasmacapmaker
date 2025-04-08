@@ -56,13 +56,19 @@
 
       <input type="file" accept="image/*" onchange="previewImage(event)" class="mb-2 text-sm" />
 
-      <div id="canvas-container" class="relative w-[300px] h-[300px] border-2 border-dashed border-gray-400 rounded-md overflow-hidden bg-gray-100">
+      <div id="canvas-container" class="relative w-[500px] h-[500px] border-2 border-dashed border-gray-400 rounded-md overflow-hidden bg-gray-100">
         <img id="uploaded-image" class="absolute top-0 left-0 w-full h-full object-cover" />
       </div>
 
-      <button onclick="downloadImage()" class="bg-orange-500 hover:bg-orange-600 transition text-white px-6 py-2 rounded-full shadow-md mt-2">
-        ⬇️ Download Image
-      </button>
+      <!-- ✅ Buttons (Invert + Download) -->
+      <div class="flex gap-4 mt-2">
+        <button onclick="invertCap()" class="bg-blue-500 hover:bg-blue-600 transition text-white px-6 py-2 rounded-full shadow-md">
+          ↔️ Invert Cap
+        </button>
+        <button onclick="downloadImage()" class="bg-orange-500 hover:bg-orange-600 transition text-white px-6 py-2 rounded-full shadow-md">
+          ⬇️ Download Image
+        </button>
+      </div>
     </div>
 
     <!-- Right -->
@@ -204,6 +210,14 @@
         });
     }
 
+    function invertCap() {
+      if (currentCap) {
+        const img = currentCap.querySelector('img');
+        const isFlipped = img.style.transform === 'scaleX(-1)';
+        img.style.transform = isFlipped ? 'scaleX(1)' : 'scaleX(-1)';
+      }
+    }
+
     function downloadImage() {
       const original = document.getElementById('canvas-container');
       const cap = currentCap;
@@ -214,10 +228,19 @@
       if (cap && capClone) {
         const x = parseFloat(cap.getAttribute('data-x')) || 0;
         const y = parseFloat(cap.getAttribute('data-y')) || 0;
+        const img = cap.querySelector('img');
+        const isFlipped = img.style.transform === 'scaleX(-1)';
+
         capClone.style.left = `${cap.offsetLeft + x}px`;
         capClone.style.top = `${cap.offsetTop + y}px`;
         capClone.style.transform = 'none';
         capClone.style.position = 'absolute';
+
+        const cloneImg = capClone.querySelector('img');
+        if (cloneImg && isFlipped) {
+          cloneImg.style.transform = 'scaleX(-1)';
+        }
+
         capClone.querySelectorAll('.resize-handle, .resize-box-outline').forEach(el => el.remove());
       }
 
@@ -248,6 +271,5 @@
       });
     }
   </script>
-
 </body>
 </html>
