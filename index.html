@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Plasma Cap Maker</title>
+  <title>Plasma Cap & Laser Maker - Smooth Handles</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
   <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
@@ -11,265 +11,421 @@
     body {
       font-family: 'Comic Sans MS', sans-serif;
     }
-    #draggable-cap {
-      cursor: move;
-      touch-action: none;
+    .draggable-overlay {
+      /* Allow interaction events to pass through overlay to handles/edges when needed */
+      /* touch-action: none; */ /* Removed to allow default browser actions like scroll sometimes */
       position: absolute;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      border: 1px solid transparent; /* Minimal border for layout */
+      box-sizing: border-box;
+      transform-origin: center center;
+      /* Cursors will be set by interactjs based on action (drag/resize) */
     }
-    #draggable-cap img {
-      max-width: 100%;
-      max-height: 100%;
+    .draggable-overlay img {
+      display: block; /* Prevent small gaps */
+      width: 100%;
+      height: 100%;
       object-fit: contain;
-      pointer-events: none;
+      pointer-events: none; /* Image shouldn't block interactions */
     }
-    .resize-handle {
-      width: 10px;
-      height: 10px;
-      background-color: #3b82f6;
-      border: 2px solid white;
-      border-radius: 50%;
-      position: absolute;
-      z-index: 10;
-      box-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
+
+    /* --- Handle Container & Visual Handles (Not directly interactive for resize) --- */
+    .handle-container {
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        pointer-events: none; /* Container doesn't block clicks to element edges */
+        display: none;
+        z-index: 10; /* Below rotation handle */
     }
-    .resize-box-outline {
-      border: 1.5px dashed #3b82f6;
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      pointer-events: none;
-      z-index: 5;
+    .overlay-selected .handle-container {
+        display: block;
     }
+
+    .handle-visual { /* Renamed class */
+        position: absolute;
+        width: 14px;
+        height: 14px;
+        background-color: white;
+        border: 2px solid #3b82f6; /* Blue border */
+        border-radius: 50%;
+        box-shadow: 0 0 3px rgba(0, 0, 0, 0.4);
+        box-sizing: border-box;
+        /* Handles are just visual cues now, not directly draggable for resize */
+        pointer-events: none;
+         /* Center the handle visually */
+        transform: translate(-50%, -50%);
+    }
+
+    /* --- Rotation Handle (Still interactive) --- */
+    .rotation-handle {
+        position: absolute;
+        width: 16px; /* Slightly larger */
+        height: 16px;
+        background-color: #a5f3fc; /* Light cyan */
+        border: 2px solid #3b82f6;
+        border-radius: 50%;
+        box-shadow: 0 0 3px rgba(0, 0, 0, 0.4);
+        box-sizing: border-box;
+        cursor: alias; /* Rotation cursor */
+        z-index: 15; /* Above other handles */
+        transform: translate(-50%, -50%);
+        top: -25px; /* Position above the top edge */
+        left: 50%;
+        display: none; /* Hidden by default */
+        pointer-events: all; /* Rotation handle is interactive */
+    }
+     .rotation-line {
+        position: absolute;
+        width: 2px;
+        height: 25px;
+        background-color: #3b82f6;
+        left: 50%;
+        top: -25px;
+        transform: translateX(-50%);
+        pointer-events: none;
+        z-index: 14;
+        display: none; /* Hidden by default */
+    }
+    .overlay-selected .rotation-handle,
+    .overlay-selected .rotation-line {
+        display: block; /* Show only when selected */
+    }
+
   </style>
 </head>
 <body class="bg-green-100 min-h-screen flex items-center justify-center p-6">
 
   <div class="bg-white rounded-2xl shadow-xl p-6 flex flex-col md:flex-row gap-6 w-full max-w-5xl">
-    <!-- Left -->
     <div class="flex-1 flex flex-col items-center gap-4">
-      <h1 class="text-3xl font-bold text-orange-500">🧢 Plasma Cap Maker</h1>
+      <h1 class="text-3xl font-bold text-orange-500">🧢 Plasma Cap & Laser Maker 🔥</h1>
+       <p class="text-sm text-gray-600">Click item to select. Drag edges/corners to resize. Drag top handle to rotate.</p>
 
-      <input type="file" accept="image/*" onchange="previewImage(event)" class="mb-2 text-sm" />
+      <input type="file" id="image-upload" accept="image/*" onchange="previewImage(event)" class="mb-2 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-orange-50 file:text-orange-600 hover:file:bg-orange-100" />
 
       <div id="canvas-container" class="relative w-[500px] h-[500px] border-2 border-dashed border-gray-400 rounded-md overflow-hidden bg-gray-100">
-        <img id="uploaded-image" class="absolute top-0 left-0 w-full h-full object-cover" />
+        <img id="uploaded-image" class="absolute top-0 left-0 w-full h-full object-cover" style="display: none;" />
       </div>
 
-      <!-- ✅ Buttons (Invert + Download) -->
       <div class="flex gap-4 mt-2">
-        <button onclick="invertCap()" class="bg-blue-500 hover:bg-blue-600 transition text-white px-6 py-2 rounded-full shadow-md">
-          ↔️ Invert Cap
-        </button>
-        <button onclick="downloadImage()" class="bg-orange-500 hover:bg-orange-600 transition text-white px-6 py-2 rounded-full shadow-md">
-          ⬇️ Download Image
-        </button>
+        <button onclick="invertSelectedOverlay()" class="bg-blue-500 hover:bg-blue-600 transition text-white px-6 py-2 rounded-full shadow-md disabled:opacity-50 disabled:cursor-not-allowed" title="Flip selected item horizontally" id="invert-button" disabled>↔️ Invert</button>
+         <button onclick="removeSelectedOverlay()" class="bg-red-500 hover:bg-red-600 transition text-white px-4 py-2 rounded-full shadow-md text-sm disabled:opacity-50 disabled:cursor-not-allowed" id="remove-button" disabled>❌ Remove</button>
+        <button onclick="downloadImage()" class="bg-orange-500 hover:bg-orange-600 transition text-white px-6 py-2 rounded-full shadow-md">⬇️ Download</button>
       </div>
     </div>
 
-    <!-- Right -->
     <div class="w-full md:w-48 flex flex-col items-center gap-4">
-      <h2 class="text-xl font-semibold text-orange-600">Choose a Cap</h2>
-      <div class="flex flex-col gap-4">
-        <img src="hat.png" alt="hat1" onclick="selectCap('hat.png')" class="w-20 h-20 border-4 border-transparent hover:border-orange-400 transition cursor-pointer rounded-xl shadow">
-        <img src="hat2.png" alt="hat2" onclick="selectCap('hat2.png')" class="w-20 h-20 border-4 border-transparent hover:border-orange-400 transition cursor-pointer rounded-xl shadow">
-      </div>
+       <h2 class="text-xl font-semibold text-orange-600">Add Hats</h2>
+        <div class="flex flex-row md:flex-col gap-4">
+            <img src="hat.png" alt="Cool Hat" onclick="addOverlay('hat.png', 'hat')" class="w-20 h-20 border-4 border-transparent hover:border-orange-400 transition cursor-pointer rounded-xl shadow" title="Add Cool Hat">
+            <img src="hat2.png" alt="Party Hat" onclick="addOverlay('hat2.png', 'hat')" class="w-20 h-20 border-4 border-transparent hover:border-orange-400 transition cursor-pointer rounded-xl shadow" title="Add Party Hat">
+        </div>
+        <hr class="w-full border-gray-300 my-2">
+        <h2 class="text-xl font-semibold text-red-600">Add Lasers</h2>
+        <div class="flex flex-row md:flex-col gap-4">
+            <img src="laser.png" alt="Laser Eyes" onclick="addOverlay('laser.png', 'laser')" class="w-20 h-20 border-4 border-transparent hover:border-red-500 transition cursor-pointer rounded-xl shadow" title="Add Laser Eyes">
+        </div>
     </div>
   </div>
 
   <script>
-    let currentCap = null;
+    let activeOverlays = [];
+    let selectedOverlay = null;
+    let overlayCounter = 0;
 
-    function previewImage(event) {
+    const canvasContainer = document.getElementById('canvas-container');
+    const uploadedImage = document.getElementById('uploaded-image');
+    const invertButton = document.getElementById('invert-button');
+    const removeButton = document.getElementById('remove-button');
+
+    // --- Image Upload ---
+    function previewImage(event) { /* ... (no changes needed) ... */
       const file = event.target.files[0];
-      const img = document.getElementById('uploaded-image');
-      img.src = URL.createObjectURL(file);
-      img.onload = () => makeImageInteractable();
-    }
-
-    function makeImageInteractable() {
-      const img = document.getElementById('uploaded-image');
-      img.setAttribute('data-x', 0);
-      img.setAttribute('data-y', 0);
-
-      interact(img)
-        .draggable({
-          modifiers: [interact.modifiers.restrictRect({ restriction: 'parent', endOnly: true })],
-          listeners: {
-            move(event) {
-              const target = event.target;
-              const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;
-              const y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;
-              target.style.transform = `translate(${x}px, ${y}px)`;
-              target.setAttribute('data-x', x);
-              target.setAttribute('data-y', y);
-            }
-          }
-        })
-        .resizable({
-          edges: { left: true, right: true, bottom: true, top: true },
-          listeners: {
-            move(event) {
-              const target = event.target;
-              const { width, height } = event.rect;
-              target.style.width = `${width}px`;
-              target.style.height = `${height}px`;
-              const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.deltaRect.left;
-              const y = (parseFloat(target.getAttribute('data-y')) || 0) + event.deltaRect.top;
-              target.style.transform = `translate(${x}px, ${y}px)`;
-              target.setAttribute('data-x', x);
-              target.setAttribute('data-y', y);
-            }
-          },
-          modifiers: [
-            interact.modifiers.restrictEdges({ outer: 'parent' }),
-            interact.modifiers.restrictSize({ min: { width: 100, height: 100 }, max: { width: 500, height: 500 } })
-          ],
-          inertia: true
-        });
-    }
-
-    function addHandles(target) {
-      const positions = [
-        ['top', 'left'], ['top', 'center'], ['top', 'right'],
-        ['middle', 'left'], ['middle', 'right'],
-        ['bottom', 'left'], ['bottom', 'center'], ['bottom', 'right']
-      ];
-      target.querySelectorAll('.resize-handle').forEach(h => h.remove());
-      positions.forEach(([v, h]) => {
-        const dot = document.createElement('div');
-        dot.className = 'resize-handle';
-        dot.style.top = v === 'top' ? '0%' : v === 'middle' ? '50%' : '100%';
-        dot.style.left = h === 'left' ? '0%' : h === 'center' ? '50%' : '100%';
-        dot.style.transform = 'translate(-50%, -50%)';
-        target.appendChild(dot);
-      });
-    }
-
-    function selectCap(capImagePath) {
-      const container = document.getElementById('canvas-container');
-      if (currentCap) {
-        container.removeChild(currentCap);
-        currentCap = null;
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        uploadedImage.src = e.target.result;
+        uploadedImage.style.display = 'block';
+        uploadedImage.style.transform = 'translate(0px, 0px)';
+        uploadedImage.style.width = '100%';
+        uploadedImage.style.height = '100%';
+        uploadedImage.setAttribute('data-x', 0);
+        uploadedImage.setAttribute('data-y', 0);
       }
+      reader.readAsDataURL(file);
+     }
 
-      const cap = document.createElement('div');
-      cap.id = 'draggable-cap';
-      cap.className = 'top-1/4 left-1/4 w-32 h-20';
-      cap.innerHTML = `<img src="${capImagePath}" alt="cap" /><div class="resize-box-outline"></div>`;
-      container.appendChild(cap);
-      currentCap = cap;
+    // --- Overlay Management ---
+    function addOverlay(overlayImagePath, type) { /* ... (mostly same, setup interaction) ... */
+      overlayCounter++;
+      const overlayId = `overlay-${overlayCounter}`;
+      const overlayElement = document.createElement('div');
+      overlayElement.id = overlayId;
+      overlayElement.classList.add('draggable-overlay');
+      overlayElement.setAttribute('data-type', type);
+      overlayElement.setAttribute('data-angle', '0');
+      overlayElement.setAttribute('data-x', '0'); // Store translation x
+      overlayElement.setAttribute('data-y', '0'); // Store translation y
+      overlayElement.style.width = (type === 'laser' ? '100px' : '130px');
+      overlayElement.style.height = (type === 'laser' ? '60px' : '80px');
+      const initialOffsetX = canvasContainer.offsetWidth * (type === 'laser' ? 0.33 : 0.25);
+      const initialOffsetY = canvasContainer.offsetHeight * (type === 'laser' ? 0.33 : 0.25);
+      overlayElement.style.left = `${initialOffsetX}px`;
+      overlayElement.style.top = `${initialOffsetY}px`;
+      overlayElement.style.transform = 'translate(0px, 0px) rotate(0deg)';
 
-      addHandles(cap);
-      makeInteractable(cap);
+      overlayElement.innerHTML = `<img src="${overlayImagePath}" alt="${type}" />`;
+
+      // Add visual handles and interactive rotation handle
+      addHandlesAndRotation(overlayElement);
+
+      canvasContainer.appendChild(overlayElement);
+      activeOverlays.push(overlayElement);
+
+      // Setup main drag/resize and rotation interactions
+      makeOverlayInteractable(overlayElement);
+
+      selectOverlay(overlayElement); // Select the new one
     }
 
-    function makeInteractable(cap) {
-      interact(cap)
-        .draggable({
-          modifiers: [interact.modifiers.restrictRect({ restriction: 'parent', endOnly: true })],
-          listeners: {
-            move(event) {
-              const target = event.target;
-              const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;
-              const y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;
-              target.style.transform = `translate(${x}px, ${y}px)`;
-              target.setAttribute('data-x', x);
-              target.setAttribute('data-y', y);
-            }
-          }
-        })
-        .resizable({
-          edges: { left: true, right: true, bottom: true, top: true },
-          listeners: {
-            move(event) {
-              const target = event.target;
-              const { width, height } = event.rect;
-              target.style.width = `${width}px`;
-              target.style.height = `${height}px`;
-              const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.deltaRect.left;
-              const y = (parseFloat(target.getAttribute('data-y')) || 0) + event.deltaRect.top;
-              target.style.transform = `translate(${x}px, ${y}px)`;
-              target.setAttribute('data-x', x);
-              target.setAttribute('data-y', y);
-              addHandles(target);
-            }
-          },
-          modifiers: [
-            interact.modifiers.restrictEdges({ outer: 'parent' }),
-            interact.modifiers.restrictSize({ min: { width: 50, height: 50 }, max: { width: 500, height: 500 } })
-          ],
-          inertia: true
-        })
-        .on('resizestart', event => {
-          addHandles(event.target);
-        });
-    }
-
-    function invertCap() {
-      if (currentCap) {
-        const img = currentCap.querySelector('img');
-        const isFlipped = img.style.transform === 'scaleX(-1)';
-        img.style.transform = isFlipped ? 'scaleX(1)' : 'scaleX(-1)';
-      }
-    }
-
-    function downloadImage() {
-      const original = document.getElementById('canvas-container');
-      const cap = currentCap;
-
-      const clone = original.cloneNode(true);
-      const capClone = clone.querySelector('#draggable-cap');
-
-      if (cap && capClone) {
-        const x = parseFloat(cap.getAttribute('data-x')) || 0;
-        const y = parseFloat(cap.getAttribute('data-y')) || 0;
-        const img = cap.querySelector('img');
-        const isFlipped = img.style.transform === 'scaleX(-1)';
-
-        capClone.style.left = `${cap.offsetLeft + x}px`;
-        capClone.style.top = `${cap.offsetTop + y}px`;
-        capClone.style.transform = 'none';
-        capClone.style.position = 'absolute';
-
-        const cloneImg = capClone.querySelector('img');
-        if (cloneImg && isFlipped) {
-          cloneImg.style.transform = 'scaleX(-1)';
+    function selectOverlay(elementToSelect) { /* ... (no changes needed) ... */
+        if (selectedOverlay && selectedOverlay !== elementToSelect) {
+            selectedOverlay.classList.remove('overlay-selected');
         }
-
-        capClone.querySelectorAll('.resize-handle, .resize-box-outline').forEach(el => el.remove());
-      }
-
-      const imgClone = clone.querySelector('#uploaded-image');
-      if (imgClone) {
-        const x = parseFloat(imgClone.getAttribute('data-x')) || 0;
-        const y = parseFloat(imgClone.getAttribute('data-y')) || 0;
-        imgClone.style.left = `${imgClone.offsetLeft + x}px`;
-        imgClone.style.top = `${imgClone.offsetTop + y}px`;
-        imgClone.style.transform = 'none';
-        imgClone.style.position = 'absolute';
-      }
-
-      clone.style.position = 'fixed';
-      clone.style.top = '-10000px';
-      document.body.appendChild(clone);
-
-      html2canvas(clone, { backgroundColor: '#ffffff', useCORS: true, allowTaint: true }).then(canvas => {
-        const link = document.createElement('a');
-        link.download = 'plasma-cap.jpg';
-        link.href = canvas.toDataURL('image/jpeg', 0.95);
-        link.click();
-        document.body.removeChild(clone);
-      }).catch(err => {
-        console.error('Download failed', err);
-        alert('Something went wrong while downloading.');
-        document.body.removeChild(clone);
-      });
+        if (elementToSelect) {
+            // Add class to show handles via CSS
+            elementToSelect.classList.add('overlay-selected');
+            selectedOverlay = elementToSelect;
+            selectedOverlay.style.zIndex = overlayCounter + 1;
+            invertButton.disabled = false;
+            removeButton.disabled = false;
+        } else {
+            selectedOverlay = null;
+            invertButton.disabled = true;
+            removeButton.disabled = true;
+        }
     }
+
+    function deselectAll() { /* ... (no changes needed) ... */
+         if (selectedOverlay) {
+            selectedOverlay.classList.remove('overlay-selected');
+        }
+        selectedOverlay = null;
+        invertButton.disabled = true;
+        removeButton.disabled = true;
+     }
+
+    canvasContainer.addEventListener('pointerdown', (event) => { /* ... (no changes needed) ... */
+         if (event.target === canvasContainer || event.target === uploadedImage) {
+            deselectAll();
+        }
+    });
+
+
+    // --- Add Visual Handles & Interactive Rotation ---
+    function addHandlesAndRotation(overlayElement) {
+        // Container for visual-only resize handles
+        const handleContainer = document.createElement('div');
+        handleContainer.className = 'handle-container';
+        overlayElement.appendChild(handleContainer);
+
+        // Visual Resize Handles (not interactive)
+        const positions = [
+            { top: '0%', left: '0%' }, { top: '0%', left: '100%' },
+            { top: '50%', left: '0%' }, { top: '50%', left: '100%' },
+            { top: '100%', left: '0%' }, { top: '100%', left: '50%' }, { top: '100%', left: '100%' }
+            // Top-center visual handle omitted
+        ];
+        positions.forEach(pos => {
+            const handle = document.createElement('div');
+            handle.className = 'handle-visual'; // Use visual class
+            handle.style.top = pos.top;
+            handle.style.left = pos.left;
+            handleContainer.appendChild(handle);
+        });
+
+        // Interactive Rotation Handle + Line
+        const rotationLine = document.createElement('div');
+        rotationLine.className = 'rotation-line'; // Style controls visibility
+        overlayElement.appendChild(rotationLine); // Append directly to overlay
+
+        const rotHandle = document.createElement('div');
+        rotHandle.className = 'rotation-handle'; // Style controls visibility
+        overlayElement.appendChild(rotHandle); // Append directly to overlay
+        makeRotationHandleDraggable(rotHandle, overlayElement); // Make only this handle draggable
+    }
+
+
+    // --- Setup Main Interactions (Drag/Resize) ---
+    function makeOverlayInteractable(element) {
+        interact(element)
+            .draggable({
+                listeners: {
+                    start: (event) => selectOverlay(event.target),
+                    move: dragMoveListener, // Use standard drag listener
+                    end: null // Optional cleanup
+                },
+                modifiers: [ /* Optional restrictions */ ],
+                inertia: true
+            })
+            .resizable({
+                // Use interact's built-in edge detection
+                edges: { left: true, right: true, bottom: true, top: true },
+                listeners: {
+                    start: (event) => selectOverlay(event.target),
+                    move: resizeMoveListener, // Use standard resize listener
+                    end: null // Optional cleanup
+                },
+                modifiers: [
+                    interact.modifiers.restrictSize({ min: { width: 30, height: 30 } })
+                ],
+                inertia: false // Usually false for resize
+            })
+            .on('down', (event) => { // Select on click/tap
+              selectOverlay(event.currentTarget);
+              event.stopPropagation();
+            });
+    }
+
+    // --- Setup Rotation Handle Interaction ---
+    function makeRotationHandleDraggable(handleElement, overlayElement) {
+         interact(handleElement)
+            .draggable({ // Rotation handle is draggable
+                listeners: {
+                    start: (event) => selectOverlay(overlayElement), // Ensure parent is selected
+                    move: (event) => rotateListener(event, overlayElement), // Call rotate logic
+                    end: null
+                },
+                inertia: false
+            });
+    }
+
+
+    // --- Interaction Event Listeners ---
+
+    function dragMoveListener(event) {
+      const target = event.target;
+      const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;
+      const y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;
+      const angle = parseFloat(target.getAttribute('data-angle')) || 0; // Get current angle
+
+      // Update transform with new position and existing angle
+      target.style.transform = `translate(${x}px, ${y}px) rotate(${angle}deg)`;
+
+      // Update the position attributes
+      target.setAttribute('data-x', x);
+      target.setAttribute('data-y', y);
+    }
+
+    function resizeMoveListener(event) {
+      const target = event.target;
+      let x = parseFloat(target.getAttribute('data-x')) || 0;
+      let y = parseFloat(target.getAttribute('data-y')) || 0;
+      const angle = parseFloat(target.getAttribute('data-angle')) || 0; // Get current angle
+
+      // Apply the new width and height from interactjs event
+      target.style.width = `${event.rect.width}px`;
+      target.style.height = `${event.rect.height}px`;
+
+      // Update translation based on interactjs deltaRect
+      // This accounts for movement during resize (especially from top/left edges)
+      x += event.deltaRect.left;
+      y += event.deltaRect.top;
+
+      // Update transform with new position/dimensions and existing angle
+      target.style.transform = `translate(${x}px, ${y}px) rotate(${angle}deg)`;
+
+      // Update the data attributes
+      target.setAttribute('data-x', x);
+      target.setAttribute('data-y', y);
+    }
+
+     function rotateListener(event, target) { // (Mostly unchanged)
+        const rect = target.getBoundingClientRect();
+        // Use page coordinates adjusted by scroll for center calculation
+        const centerX = rect.left + rect.width / 2 + window.scrollX;
+        const centerY = rect.top + rect.height / 2 + window.scrollY;
+
+        const angleRad = Math.atan2(event.pageY - centerY, event.pageX - centerX);
+        let angleDeg = angleRad * (180 / Math.PI) + 90; // Offset 90deg
+
+        const currentTranslateX = parseFloat(target.getAttribute('data-x')) || 0;
+        const currentTranslateY = parseFloat(target.getAttribute('data-y')) || 0;
+
+        target.style.transform = `translate(${currentTranslateX}px, ${currentTranslateY}px) rotate(${angleDeg}deg)`;
+        target.setAttribute('data-angle', angleDeg); // Update angle attribute
+    }
+
+    // --- Action Buttons & Download ---
+
+    function invertSelectedOverlay() { /* ... (no changes needed) ... */
+         if (selectedOverlay) {
+            const img = selectedOverlay.querySelector('img');
+            if (img) {
+              const currentTransform = img.style.transform || '';
+              const scaleXRegex = /scaleX\(-1\)/;
+              if (scaleXRegex.test(currentTransform)) {
+                  img.style.transform = currentTransform.replace(scaleXRegex, '').trim();
+              } else {
+                  img.style.transform = `${currentTransform} scaleX(-1)`.trim();
+              }
+            }
+          }
+     }
+
+     function removeSelectedOverlay() { /* ... (Interact cleanup simplified) ... */
+        if (selectedOverlay) {
+            const elementToRemove = selectedOverlay;
+            const elementId = elementToRemove.id;
+            deselectAll();
+            // Unset interact instance on the main element (handles are not interactable now)
+            interact(elementToRemove).unset();
+            // Unset rotation handle interaction specifically
+            const rotHandle = elementToRemove.querySelector('.rotation-handle');
+            if (rotHandle) interact(rotHandle).unset();
+            // Remove from DOM & array
+            canvasContainer.removeChild(elementToRemove);
+            activeOverlays = activeOverlays.filter(overlay => overlay.id !== elementId);
+        }
+    }
+
+    function downloadImage() { /* ... (Update selectors for hiding handles) ... */
+      console.log("Download started...");
+      const containerToCapture = document.getElementById('canvas-container');
+      const currentlySelected = selectedOverlay;
+
+      // Temporarily hide selection effects and handle elements
+      if (currentlySelected) currentlySelected.classList.remove('overlay-selected');
+      // Select ALL visual handles, rotation handle, and line within the container
+      const allVisualHandles = containerToCapture.querySelectorAll('.handle-visual, .rotation-handle, .rotation-line');
+      allVisualHandles.forEach(el => el.style.display = 'none'); // Hide them all
+
+      html2canvas(containerToCapture, {
+        backgroundColor: null, useCORS: true, allowTaint: true, logging: false,
+        scale: window.devicePixelRatio || 1
+      }).then(canvas => {
+        // Restore visibility state based on selection
+         if (currentlySelected) currentlySelected.classList.add('overlay-selected');
+         // Simply reset display; CSS will show/hide correctly based on selection class
+         allVisualHandles.forEach(el => el.style.display = '');
+
+        const link = document.createElement('a');
+        link.download = 'plasma-creation.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        console.log("Download link clicked.");
+      }).catch(err => {
+         // Restore visibility on error too
+         if (currentlySelected) currentlySelected.classList.add('overlay-selected');
+         allVisualHandles.forEach(el => el.style.display = '');
+
+        console.error('Download failed:', err);
+        alert('Oops! Something went wrong during the image download.');
+      });
+     }
+
+    // --- Initial State ---
+    invertButton.disabled = true;
+    removeButton.disabled = true;
+
   </script>
 </body>
 </html>
