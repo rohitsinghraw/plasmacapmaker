@@ -6,7 +6,6 @@
   <title>Plasma Cap Maker</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
-  <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
   <style>
     body {
       font-family: 'Comic Sans MS', sans-serif;
@@ -204,48 +203,45 @@
         });
     }
 
+    // ✅ NEW DOWNLOAD FUNCTION USING CANVAS
     function downloadImage() {
-      const original = document.getElementById('canvas-container');
-      const cap = currentCap;
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
 
-      const clone = original.cloneNode(true);
-      const capClone = clone.querySelector('#draggable-cap');
+      const container = document.getElementById('canvas-container');
+      const uploadedImg = document.getElementById('uploaded-image');
+      const capDiv = document.getElementById('draggable-cap');
 
-      if (cap && capClone) {
-        const x = parseFloat(cap.getAttribute('data-x')) || 0;
-        const y = parseFloat(cap.getAttribute('data-y')) || 0;
-        capClone.style.left = `${cap.offsetLeft + x}px`;
-        capClone.style.top = `${cap.offsetTop + y}px`;
-        capClone.style.transform = 'none';
-        capClone.style.position = 'absolute';
-        capClone.querySelectorAll('.resize-handle, .resize-box-outline').forEach(el => el.remove());
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+
+      canvas.width = width;
+      canvas.height = height;
+
+      // Draw uploaded image
+      const userX = parseFloat(uploadedImg.getAttribute('data-x')) || 0;
+      const userY = parseFloat(uploadedImg.getAttribute('data-y')) || 0;
+      const imgWidth = uploadedImg.clientWidth;
+      const imgHeight = uploadedImg.clientHeight;
+
+      ctx.drawImage(uploadedImg, userX, userY, imgWidth, imgHeight);
+
+      // Draw cap image
+      if (capDiv) {
+        const capImg = capDiv.querySelector('img');
+        const capX = parseFloat(capDiv.getAttribute('data-x')) || 0;
+        const capY = parseFloat(capDiv.getAttribute('data-y')) || 0;
+        const capW = capDiv.offsetWidth;
+        const capH = capDiv.offsetHeight;
+
+        ctx.drawImage(capImg, capX, capY, capW, capH);
       }
 
-      const imgClone = clone.querySelector('#uploaded-image');
-      if (imgClone) {
-        const x = parseFloat(imgClone.getAttribute('data-x')) || 0;
-        const y = parseFloat(imgClone.getAttribute('data-y')) || 0;
-        imgClone.style.left = `${imgClone.offsetLeft + x}px`;
-        imgClone.style.top = `${imgClone.offsetTop + y}px`;
-        imgClone.style.transform = 'none';
-        imgClone.style.position = 'absolute';
-      }
-
-      clone.style.position = 'fixed';
-      clone.style.top = '-10000px';
-      document.body.appendChild(clone);
-
-      html2canvas(clone, { backgroundColor: '#ffffff', useCORS: true, allowTaint: true }).then(canvas => {
-        const link = document.createElement('a');
-        link.download = 'plasma-cap.jpg';
-        link.href = canvas.toDataURL('image/jpeg', 0.95);
-        link.click();
-        document.body.removeChild(clone);
-      }).catch(err => {
-        console.error('Download failed', err);
-        alert('Something went wrong while downloading.');
-        document.body.removeChild(clone);
-      });
+      // Trigger download
+      const link = document.createElement('a');
+      link.download = 'plasma-cap.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
     }
   </script>
 
